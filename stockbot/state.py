@@ -9,15 +9,32 @@ from .config import Config
 logger = logging.getLogger(__name__)
 
 
+DEFAULT_STATE = {
+    "weekly_alert_counts_by_ticker": {},
+    "telegram": {"heartbeat_enabled": False, "last_update_id": None},
+}
+
+
+def ensure_state_defaults(state: dict) -> dict:
+    """Merge missing keys so older state files keep working."""
+    if not isinstance(state, dict):
+        return DEFAULT_STATE.copy()
+    state.setdefault("weekly_alert_counts_by_ticker", {})
+    state.setdefault("telegram", {})
+    state["telegram"].setdefault("heartbeat_enabled", False)
+    state["telegram"].setdefault("last_update_id", None)
+    return state
+
+
 def load_state(cfg: Config):
     """Load the JSON state file if it exists, otherwise return defaults."""
     path = Path(cfg.state_file)
     if not path.exists():
         logger.info("State file not found, starting fresh: %s", path)
-        return {"weekly_alert_counts_by_ticker": {}}
+        return DEFAULT_STATE.copy()
     logger.info("Loading state: %s", path)
     with path.open("r", encoding="utf-8") as f:
-        return json.load(f)
+        return ensure_state_defaults(json.load(f))
 
 
 def save_state(state, cfg: Config):

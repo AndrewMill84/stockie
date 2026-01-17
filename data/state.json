@@ -26,5 +26,9 @@
   "weekly_buy_used": {
     "2026-03": true
   },
-  "open_pick": "NVDA"
+  "open_pick": "NVDA",
+  "telegram": {
+    "heartbeat_enabled": false,
+    "last_update_id": 344413579
+  }
 }

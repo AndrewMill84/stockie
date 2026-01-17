@@ -11,7 +11,7 @@ from .state import (
     can_send_weekly_alert_for_ticker,
     increment_weekly_alert_for_ticker,
 )
-from .telegram import send_telegram
+from .telegram import send_telegram, process_telegram_commands
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +26,8 @@ def run_scan(cfg: Config):
     )
     # Load state so we can throttle alerts (per ticker, per week).
     state = load_state(cfg)
+    # Process inbound Telegram commands (e.g., /log on/off).
+    state = process_telegram_commands(cfg, state)
     # Collect any signals we find so we can send one combined message.
     alerts = []
 
@@ -66,10 +68,18 @@ def run_scan(cfg: Config):
         message = "\n".join(lines)
         logger.info("Sending alert to Telegram (%d tickers)", len(alerts))
         send_telegram(message, cfg)
-        # Persist state after sending.
-        save_state(state, cfg)
     else:
         # Nothing matched the signal rules today.
         logger.info("No buy setups today.")
+
+    if state.get("telegram", {}).get("heartbeat_enabled"):
+        summary = (
+            f"Scan complete: {len(cfg.tickers)} tickers, "
+            f"{len(alerts)} alert(s) found."
+        )
+        send_telegram(summary, cfg)
+
+    # Persist state after scan (alerts, command sync, heartbeat).
+    save_state(state, cfg)
 
     return {"alerts": alerts, "state": state}

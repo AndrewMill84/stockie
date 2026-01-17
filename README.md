@@ -55,6 +55,23 @@ Send a forced Telegram test message:
 python -m stockbot test-telegram
 ```
 
+Toggle scan heartbeat notifications (from Telegram):
+
+```
+/log        # toggle on/off
+/log on     # enable
+/log off    # disable
+```
+
+Heartbeat messages are delivered at the end of each scan. The command is
+processed the next time a scan runs.
+
+Manually sync Telegram commands (without running a scan):
+
+```bash
+python -m stockbot telegram-sync
+```
+
 Replay historical signals:
 
 ```bash

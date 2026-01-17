@@ -6,8 +6,9 @@ import pandas as pd
 from .config import Config, setup_logging
 from .scanner import run_scan
 from .replay import replay_signals
-from .telegram import send_telegram, print_telegram_messages
+from .telegram import send_telegram, print_telegram_messages, process_telegram_commands
 from .weekly_rank import rank_best_setups_this_week
+from .state import load_state, save_state
 
 
 def build_cfg_from_args(args) -> Config:
@@ -68,6 +69,10 @@ def main():
     fetch = sub.add_parser("get-telegram")
     fetch.add_argument("--offset", type=int)
 
+    # Sync command: process inbound Telegram commands (e.g., /log on/off).
+    sync = sub.add_parser("telegram-sync")
+    sync.add_argument("--state-file")
+
     # Weekly rank command: score and rank tickers for the week.
     weekly = sub.add_parser("weekly-rank")
     weekly.add_argument("--top", type=int, default=3)
@@ -102,3 +107,7 @@ def main():
         next_offset = print_telegram_messages(cfg, offset=args.offset)
         if next_offset is not None:
             print(f"Next offset: {next_offset}")
+    elif args.cmd == "telegram-sync":
+        state = load_state(cfg)
+        state = process_telegram_commands(cfg, state)
+        save_state(state, cfg)
