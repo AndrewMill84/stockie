@@ -72,6 +72,12 @@ Manually sync Telegram commands (without running a scan):
 python -m stockbot telegram-sync
 ```
 
+Listen for Telegram messages (long polling):
+
+```bash
+python -m stockbot telegram-listen
+```
+
 Replay historical signals:
 
 ```bash

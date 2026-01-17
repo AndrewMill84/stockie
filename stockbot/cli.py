@@ -6,7 +6,12 @@ import pandas as pd
 from .config import Config, setup_logging
 from .scanner import run_scan
 from .replay import replay_signals
-from .telegram import send_telegram, print_telegram_messages, process_telegram_commands
+from .telegram import (
+    listen_for_telegram_messages,
+    print_telegram_messages,
+    process_telegram_commands,
+    send_telegram,
+)
 from .weekly_rank import rank_best_setups_this_week
 from .state import load_state, save_state
 
@@ -73,6 +78,12 @@ def main():
     sync = sub.add_parser("telegram-sync")
     sync.add_argument("--state-file")
 
+    # Listen command: long-poll Telegram and log messages/commands.
+    listen = sub.add_parser("telegram-listen")
+    listen.add_argument("--state-file")
+    listen.add_argument("--poll-seconds", type=float, default=1.0)
+    listen.add_argument("--no-log-messages", action="store_true")
+
     # Weekly rank command: score and rank tickers for the week.
     weekly = sub.add_parser("weekly-rank")
     weekly.add_argument("--top", type=int, default=3)
@@ -111,3 +122,12 @@ def main():
         state = load_state(cfg)
         state = process_telegram_commands(cfg, state)
         save_state(state, cfg)
+    elif args.cmd == "telegram-listen":
+        state = load_state(cfg)
+        listen_for_telegram_messages(
+            cfg,
+            state,
+            poll_seconds=args.poll_seconds,
+            log_messages=not args.no_log_messages,
+            on_state_update=lambda s: save_state(s, cfg),
+        )

@@ -1,6 +1,7 @@
 """Telegram messaging helper."""
 
 import logging
+import time
 import requests
 from .config import Config
 
@@ -52,18 +53,72 @@ def print_telegram_messages(cfg: Config, offset: int | None = None) -> int | Non
     last_update_id = None
     for update in updates:
         last_update_id = update.get("update_id", last_update_id)
-        msg = update.get("message") or update.get("edited_message") or {}
-        chat = msg.get("chat", {})
-        text = msg.get("text") or ""
-        sender = msg.get("from", {}).get("username") or msg.get("from", {}).get("first_name", "")
-        chat_id = chat.get("id", "")
-        chat_title = chat.get("title") or chat.get("username") or ""
-        if text:
-            logger.info("Chat %s %s (%s): %s", chat_id, chat_title, sender, text)
+        _log_update_message(update)
 
     if last_update_id is None:
         return offset
     return last_update_id + 1
+
+
+def _log_update_message(update: dict) -> None:
+    msg = update.get("message") or update.get("edited_message") or {}
+    chat = msg.get("chat", {})
+    text = msg.get("text") or ""
+    sender = msg.get("from", {}).get("username") or msg.get("from", {}).get("first_name", "")
+    chat_id = chat.get("id", "")
+    chat_title = chat.get("title") or chat.get("username") or ""
+    if text:
+        logger.info("Chat %s %s (%s): %s", chat_id, chat_title, sender, text)
+
+
+def _apply_telegram_updates(
+    cfg: Config,
+    state: dict,
+    updates: list,
+    *,
+    log_messages: bool = False,
+) -> tuple[dict, bool]:
+    telegram_state = state.setdefault("telegram", {})
+    telegram_state.setdefault("heartbeat_enabled", False)
+    telegram_state.setdefault("last_update_id", None)
+    last_update_id = telegram_state.get("last_update_id")
+    changed = False
+
+    for update in updates:
+        update_id = update.get("update_id")
+        if update_id is not None:
+            last_update_id = update_id
+
+        if log_messages:
+            _log_update_message(update)
+
+        msg = update.get("message") or update.get("edited_message") or {}
+        text = msg.get("text") or ""
+        chat = msg.get("chat") or {}
+        chat_id = chat.get("id")
+        if cfg.telegram_chat_id and str(chat_id) != str(cfg.telegram_chat_id):
+            continue
+
+        parsed = _normalize_command(text)
+        if not parsed:
+            continue
+        cmd, args = parsed
+        if cmd not in {"log", "heartbeat", "hb"}:
+            continue
+
+        current = bool(telegram_state.get("heartbeat_enabled", False))
+        new_value = _command_to_bool(args, current)
+        telegram_state["heartbeat_enabled"] = new_value
+        status = "enabled" if new_value else "disabled"
+        send_telegram(f"Heartbeat notifications {status}.", cfg)
+        logger.info("Telegram heartbeat toggled: %s", status)
+        if new_value != current:
+            changed = True
+
+    if last_update_id != telegram_state.get("last_update_id"):
+        telegram_state["last_update_id"] = last_update_id
+        changed = True
+    return state, changed
 
 
 def _normalize_command(raw: str) -> tuple[str, list[str]] | None:
@@ -110,31 +165,39 @@ def process_telegram_commands(cfg: Config, state: dict) -> dict:
     if not updates:
         return state
 
-    last_update_id = telegram_state.get("last_update_id")
-    for update in updates:
-        update_id = update.get("update_id")
-        if update_id is not None:
-            last_update_id = update_id
-        msg = update.get("message") or update.get("edited_message") or {}
-        text = msg.get("text") or ""
-        chat = msg.get("chat") or {}
-        chat_id = chat.get("id")
-        if cfg.telegram_chat_id and str(chat_id) != str(cfg.telegram_chat_id):
-            continue
-
-        parsed = _normalize_command(text)
-        if not parsed:
-            continue
-        cmd, args = parsed
-        if cmd not in {"log", "heartbeat", "hb"}:
-            continue
-
-        current = bool(telegram_state.get("heartbeat_enabled", False))
-        new_value = _command_to_bool(args, current)
-        telegram_state["heartbeat_enabled"] = new_value
-        status = "enabled" if new_value else "disabled"
-        send_telegram(f"Heartbeat notifications {status}.", cfg)
-        logger.info("Telegram heartbeat toggled: %s", status)
-
-    telegram_state["last_update_id"] = last_update_id
+    state, _ = _apply_telegram_updates(cfg, state, updates, log_messages=False)
     return state
+
+
+def listen_for_telegram_messages(
+    cfg: Config,
+    state: dict,
+    *,
+    poll_seconds: float = 1.0,
+    log_messages: bool = True,
+    on_state_update=None,
+) -> dict:
+    """
+    Long-poll Telegram for updates and optionally log messages to console.
+    Callers can pass on_state_update to persist state when it changes.
+    """
+    if not cfg.telegram_bot_token:
+        logger.info("Telegram bot token missing; cannot listen for updates.")
+        return state
+
+    logger.info("Listening for Telegram updates (Ctrl+C to stop).")
+    while True:
+        offset = state.get("telegram", {}).get("last_update_id")
+        if offset is not None:
+            offset = offset + 1
+
+        updates = fetch_telegram_updates(cfg, offset=offset)
+        if updates:
+            state, changed = _apply_telegram_updates(
+                cfg, state, updates, log_messages=log_messages
+            )
+            if changed and on_state_update:
+                on_state_update(state)
+
+        if poll_seconds:
+            time.sleep(poll_seconds)
