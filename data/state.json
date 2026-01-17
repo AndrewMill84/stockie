@@ -1,0 +1,30 @@
+{
+  "weekly_alert_counts_by_ticker": {},
+  "weekly_decisions": {
+    "2026-03": {
+      "action": "BUY",
+      "week": "2026-03",
+      "date": "2026-01-16",
+      "ticker": "NVDA",
+      "setup_type": "REVERSION",
+      "position_sizing": "quarter",
+      "entry_logic": {
+        "type": "limit",
+        "logic": "Buy on pullback near SMA20."
+      },
+      "risk_logic": {
+        "invalidation": "Close below recent swing low.",
+        "stop": "178.24"
+      },
+      "reasoning": "Selected NVDA as top eligible setup (REVERSION, score 0.638). Outranked #2: MSFT by 0.206 score points. Outranked #3: AAPL by 0.285 score points.",
+      "state_updates": {
+        "weekly_buy_used": true,
+        "open_pick": "NVDA"
+      }
+    }
+  },
+  "weekly_buy_used": {
+    "2026-03": true
+  },
+  "open_pick": "NVDA"
+}
